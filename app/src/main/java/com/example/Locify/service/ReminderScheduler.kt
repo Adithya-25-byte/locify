@@ -11,35 +11,28 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
-@Singleton
 class ReminderScheduler @Inject constructor(
-    @ApplicationContext private val context: Context
+    private val context: Context,
+    private val alarmManager: AlarmManager
 ) {
-    private val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-
     fun scheduleReminder(reminder: Reminder) {
-        val triggerTime = DateTimeUtils.toMillis(reminder.dateTime ?: return)
-        val intent = Intent(context, FullScreenAlarmActivity::class.java).apply {
-            putExtra("reminderId", reminder.id)
+        if (reminder.isTimeBased && reminder.triggerDateTime != null) {
+            alarmManager.scheduleAlarm(reminder.id, reminder.triggerDateTime)
         }
-        val pendingIntent = PendingIntent.getActivity(
-            context,
-            reminder.id.toInt(),
-            intent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-
-        alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerTime, pendingIntent)
     }
 
     fun cancelReminder(reminderId: Long) {
-        val intent = Intent(context, FullScreenAlarmActivity::class.java)
-        val pendingIntent = PendingIntent.getActivity(
-            context,
-            reminderId.toInt(),
-            intent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-        alarmManager.cancel(pendingIntent)
+        alarmManager.cancelAlarm(reminderId)
+    }
+
+    fun rescheduleAllReminders(reminders: List<Reminder>) {
+        reminders.forEach { reminder ->
+            if (reminder.isTimeBased && reminder.triggerDateTime != null && !reminder.isCompleted) {
+                // Only schedule future reminders
+                if (reminder.triggerDateTime > System.currentTimeMillis()) {
+                    scheduleReminder(reminder)
+                }
+            }
+        }
     }
 }

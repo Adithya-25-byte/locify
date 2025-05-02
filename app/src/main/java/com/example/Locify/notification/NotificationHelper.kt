@@ -1,11 +1,14 @@
 package com.example.Locify.notification
 
+import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.graphics.BitmapFactory
+import android.media.AudioAttributes
+import android.media.RingtoneManager
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
@@ -26,22 +29,22 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 import javax.inject.Singleton
 
-@Singleton
 class NotificationHelper @Inject constructor(
-    @ApplicationContext private val context: Context,
-    private val reminderDao: ReminderDao,
-    private val taskDao: TaskDao
+    private val context: Context
 ) {
-    companion object {
-        const val REMINDER_CHANNEL_ID = "reminder_channel"
-        const val LOCATION_SERVICE_CHANNEL_ID = "location_service_channel"
-        const val FULL_SCREEN_ALARM_REQUEST_CODE = 1001
-        const val MARK_COMPLETE_REQUEST_CODE = 2001
-        const val OPEN_APP_REQUEST_CODE = 3001
-    }
+    private val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
-    private val gson = Gson()
-    private val scope = CoroutineScope(Dispatchers.IO)
+    companion object {
+        const val CHANNEL_ID_REMINDER = "locify_reminder_channel"
+        const val CHANNEL_ID_LOCATION_SERVICE = "locify_location_service_channel"
+        const val CHANNEL_ID_ALARM = "locify_alarm_channel"
+
+        const val NOTIFICATION_ID_LOCATION_SERVICE = 1001
+
+        const val ACTION_COMPLETE_REMINDER = "com.example.Locify.COMPLETE_REMINDER"
+        const val ACTION_DISMISS_ALARM = "com.example.Locify.DISMISS_ALARM"
+        const val EXTRA_REMINDER_ID = "reminder_id"
+    }
 
     init {
         createNotificationChannels()
@@ -49,168 +52,148 @@ class NotificationHelper @Inject constructor(
 
     private fun createNotificationChannels() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            // Reminder channel (high priority)
+            // Reminder channel
             val reminderChannel = NotificationChannel(
-                REMINDER_CHANNEL_ID,
+                CHANNEL_ID_REMINDER,
                 "Reminders",
                 NotificationManager.IMPORTANCE_HIGH
             ).apply {
                 description = "Notifications for location-based reminders"
                 enableLights(true)
-                enableVibration(true)
+                lightColor = Color.BLUE
             }
 
-            // Location service channel (low priority)
+            // Location service channel
             val serviceChannel = NotificationChannel(
-                LOCATION_SERVICE_CHANNEL_ID,
+                CHANNEL_ID_LOCATION_SERVICE,
                 "Location Service",
                 NotificationManager.IMPORTANCE_LOW
             ).apply {
-                description = "Notifications for background location service"
+                description = "Ongoing notification for the location monitoring service"
+                setShowBadge(false)
             }
 
-            val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            // Alarm channel
+            val alarmChannel = NotificationChannel(
+                CHANNEL_ID_ALARM,
+                "Reminder Alarms",
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "Full-screen alarms for reminders"
+                enableLights(true)
+                lightColor = Color.RED
+                enableVibration(true)
+
+                val audioAttributes = AudioAttributes.Builder()
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                    .setUsage(AudioAttributes.USAGE_ALARM)
+                    .build()
+
+                val defaultSoundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
+                setSound(defaultSoundUri, audioAttributes)
+            }
+
             notificationManager.createNotificationChannel(reminderChannel)
             notificationManager.createNotificationChannel(serviceChannel)
+            notificationManager.createNotificationChannel(alarmChannel)
         }
     }
 
-    fun showReminderNotification(reminder: Reminder, tasks: List<Task>) {
-        val notificationId = reminder.id.toInt()
+    fun createReminderNotification(reminder: Reminder, tasks: List<Task> = emptyList()): Notification {
+        val pendingIntent = createPendingIntentForReminder(reminder)
 
-        // Trigger full-screen alarm
-        triggerFullScreenAlarm(reminder, tasks)
-
-        // Create notification with checkbox
-        updateReminderNotification(reminder.id, reminder.title, reminder.description, tasks)
-    }
-
-    fun updateReminderNotification(reminderId: Long, title: String, description: String, tasks: List<Task>) {
-        val notificationId = reminderId.toInt()
-        val openAppIntent = Intent(context, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-            putExtra("reminderId", reminderId)
+        // Create complete action
+        val completeIntent = Intent(context, ReminderNotificationReceiver::class.java).apply {
+            action = ACTION_COMPLETE_REMINDER
+            putExtra(EXTRA_REMINDER_ID, reminder.id)
         }
-        val openAppPendingIntent = PendingIntent.getActivity(
+        val completePendingIntent = PendingIntent.getBroadcast(
             context,
-            OPEN_APP_REQUEST_CODE + notificationId,
-            openAppIntent,
+            reminder.id.toInt() + 100,
+            completeIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        // Mark complete action
-        val markCompleteIntent = Intent(context, NotificationActionReceiver::class.java).apply {
-            action = "ACTION_MARK_COMPLETE"
-            putExtra("reminderId", reminderId)
+        val taskText = if (tasks.isNotEmpty()) {
+            val completedCount = tasks.count { it.isCompleted }
+            "\nTasks: $completedCount/${tasks.size} completed"
+        } else {
+            ""
         }
-        val markCompletePendingIntent = PendingIntent.getBroadcast(
-            context,
-            MARK_COMPLETE_REQUEST_CODE + notificationId,
-            markCompleteIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
 
-        // Build notification
-        val builder = NotificationCompat.Builder(context, REMINDER_CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_notification)
-            .setLargeIcon(BitmapFactory.decodeResource(context.resources, R.drawable.ic_location_pin))
-            .setContentTitle(title)
-            .setContentText(description)
+        return NotificationCompat.Builder(context, CHANNEL_ID_REMINDER)
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setContentTitle(reminder.title)
+            .setContentText("${reminder.description}$taskText")
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setCategory(NotificationCompat.CATEGORY_REMINDER)
+            .setContentIntent(pendingIntent)
             .setAutoCancel(false)
-            .setOngoing(true) // Cannot be swiped away
-            .setContentIntent(openAppPendingIntent)
             .addAction(
-                R.drawable.ic_check,
-                "Mark Complete",
-                markCompletePendingIntent
+                android.R.drawable.checkbox_on_background,
+                "Complete",
+                completePendingIntent
             )
-            .setColor(ContextCompat.getColor(context, R.color.purple_primary))
+            .build()
+    }
 
-        // If there are multiple tasks, use inbox style
-        if (tasks.size > 1) {
-            val inboxStyle = NotificationCompat.InboxStyle()
-                .setBigContentTitle(title)
-                .setSummaryText("${tasks.count { it.isCompleted }}/${tasks.size} tasks completed")
+    fun createLocationServiceNotification(): Notification {
+        val notificationIntent = Intent(context, MainActivity::class.java)
+        val pendingIntent = PendingIntent.getActivity(
+            context,
+            0,
+            notificationIntent,
+            PendingIntent.FLAG_IMMUTABLE
+        )
 
-            tasks.forEach { task ->
-                val prefix = if (task.isCompleted) "✓ " else "○ "
-                inboxStyle.addLine("$prefix ${task.description}")
-            }
-
-            builder.setStyle(inboxStyle)
-        }
-
-        NotificationManagerCompat.from(context).notify(notificationId, builder.build())
+        return NotificationCompat.Builder(context, CHANNEL_ID_LOCATION_SERVICE)
+            .setSmallIcon(android.R.drawable.ic_menu_mylocation)
+            .setContentTitle("Locify")
+            .setContentText("Monitoring location for reminders")
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setCategory(NotificationCompat.CATEGORY_SERVICE)
+            .setContentIntent(pendingIntent)
+            .setOngoing(true)
+            .build()
     }
 
     fun triggerFullScreenAlarm(reminder: Reminder, tasks: List<Task>) {
-        val fullScreenIntent = Intent(context, FullScreenAlarmActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_USER_ACTION
-            putExtra("reminderId", reminder.id)
-            putExtra("reminderTitle", reminder.title)
-            putExtra("reminderDescription", reminder.description)
-            putExtra("tasks", serializeTasks(tasks))
+        val alarmIntent = Intent(context, FullScreenAlarmActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+            putExtra(EXTRA_REMINDER_ID, reminder.id)
+            putExtra("reminder_title", reminder.title)
+            putExtra("reminder_description", reminder.description)
         }
 
-        context.startActivity(fullScreenIntent)
+        // Wake up device if screen is off
+        val powerManager = context.getSystemService(Context.POWER_SERVICE) as PowerManager
+        if (!powerManager.isInteractive) {
+            val wakeLock = powerManager.newWakeLock(
+                PowerManager.FULL_WAKE_LOCK or PowerManager.ACQUIRE_CAUSES_WAKEUP,
+                "Locify:AlarmWakeLock"
+            )
+            wakeLock.acquire(10000) // 10 seconds
+        }
+
+        context.startActivity(alarmIntent)
     }
 
-    fun showLocationServiceNotification() {
-        val notificationId = 1000 // Fixed ID for service notification
+    fun showReminderNotification(reminder: Reminder, tasks: List<Task> = emptyList()) {
+        val notification = createReminderNotification(reminder, tasks)
+        NotificationManagerCompat.from(context).notify(reminder.id.toInt(), notification)
+    }
 
-        val openAppIntent = Intent(context, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+    private fun createPendingIntentForReminder(reminder: Reminder): PendingIntent {
+        val intent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP
+            putExtra(EXTRA_REMINDER_ID, reminder.id)
         }
-        val openAppPendingIntent = PendingIntent.getActivity(
+
+        return PendingIntent.getActivity(
             context,
-            0,
-            openAppIntent,
+            reminder.id.toInt(),
+            intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
-
-        // Create notification
-        val builder = NotificationCompat.Builder(context, LOCATION_SERVICE_CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle("Locify is active")
-            .setContentText("Monitoring your location for reminders")
-            .setPriority(NotificationCompat.PRIORITY_LOW)
-            .setCategory(NotificationCompat.CATEGORY_SERVICE)
-            .setContentIntent(openAppPendingIntent)
-            .setOngoing(false) // Can be swiped away
-            .setColor(ContextCompat.getColor(context, R.color.purple_primary))
-
-        NotificationManagerCompat.from(context).notify(notificationId, builder.build())
-    }
-
-    fun completeReminder(reminderId: Long) {
-        scope.launch {
-            val reminder = reminderDao.getReminderById(reminderId)
-            if (reminder != null) {
-                // Mark all tasks as completed
-                val tasks = taskDao.getTasksForReminder(reminderId)
-                tasks.forEach { task ->
-                    task.isCompleted = true
-                    taskDao.updateTask(task)
-                }
-
-                // Mark reminder as completed
-                reminder.isCompleted = true
-                reminderDao.updateReminder(reminder)
-
-                // Cancel notification
-                NotificationManagerCompat.from(context).cancel(reminderId.toInt())
-            }
-        }
-    }
-
-    fun serializeTasks(tasks: List<Task>): String {
-        return gson.toJson(tasks)
-    }
-
-    fun deserializeTasks(json: String): List<Task> {
-        val type = object : TypeToken<List<Task>>() {}.type
-        return gson.fromJson(json, type) ?: emptyList()
     }
 }

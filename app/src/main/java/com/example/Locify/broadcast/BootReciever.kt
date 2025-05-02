@@ -3,9 +3,7 @@ package com.example.Locify.broadcast
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.location.Location
 import com.example.Locify.service.ReminderManager
-import com.example.Locify.utility.LocationUtils
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -13,22 +11,15 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @AndroidEntryPoint
-class LocationBroadcastReceiver : BroadcastReceiver() {
+class BootReceiver : BroadcastReceiver() {
     @Inject
     lateinit var reminderManager: ReminderManager
 
     override fun onReceive(context: Context, intent: Intent) {
-        if (intent.action == "com.example.Locify.LOCATION_UPDATE") {
-            val latitude = intent.getDoubleExtra("latitude", 0.0)
-            val longitude = intent.getDoubleExtra("longitude", 0.0)
-
-            val location = Location("LocationBroadcastReceiver").apply {
-                this.latitude = latitude
-                this.longitude = longitude
-            }
-
+        if (intent.action == Intent.ACTION_BOOT_COMPLETED) {
             CoroutineScope(Dispatchers.IO).launch {
-                reminderManager.checkLocationBasedReminders(location)
+                // Reschedule all alarms after device reboot
+                reminderManager.rescheduleAllReminders()
             }
         }
     }

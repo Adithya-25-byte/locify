@@ -1,10 +1,15 @@
 package com.example.Locify.service
 
 import android.app.Service
+import android.content.Context
 import android.content.Intent
 import android.location.Location
+import android.os.Build
 import android.os.IBinder
+import androidx.annotation.RequiresApi
 import androidx.core.app.NotificationManagerCompat
+import com.example.Locify.broadcast.LocationBroadcastReceiver
+import com.example.Locify.data.Reminder
 import com.example.Locify.data.ReminderDao
 import com.example.Locify.data.TaskDao
 import com.example.Locify.location.LocationClient
@@ -23,83 +28,90 @@ import javax.inject.Inject
 
 @AndroidEntryPoint
 class LocationMonitoringService : Service() {
-
     @Inject
     lateinit var locationClient: LocationClient
-
-    @Inject
-    lateinit var reminderDao: ReminderDao
-
-    @Inject
-    lateinit var taskDao: TaskDao
 
     @Inject
     lateinit var notificationHelper: NotificationHelper
 
     @Inject
-    lateinit var alarmManager: AlarmManager
+    lateinit var reminderManager: ReminderManager
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-
-    private var isRunning = false
+    private var isFirstRun = true
+    private var activeReminders = mutableMapOf<Long, Reminder>()
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
         super.onCreate()
-        isRunning = true
+        startForeground(
+            NotificationHelper.NOTIFICATION_ID_LOCATION_SERVICE,
+            notificationHelper.createLocationServiceNotification()
+        )
+
+        activeReminders.clear()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (intent?.action == "STOP_SERVICE") {
+        if (intent?.action == ACTION_STOP_SERVICE) {
             stopSelf()
             return START_NOT_STICKY
         }
 
-        // Show foreground notification (swipeable)
-        notificationHelper.showLocationServiceNotification()
-
         startLocationUpdates()
-
         return START_STICKY
     }
 
     private fun startLocationUpdates() {
-        locationClient.getLocationUpdates(5000L)
+        locationClient.getLocationUpdates(10000L) // Update every 10 seconds
             .catch { e -> e.printStackTrace() }
             .onEach { location ->
-                processLocationUpdate(location)
+                // Broadcast location update for any components that need it
+                val intent = Intent(this, LocationBroadcastReceiver::class.java).apply {
+                    action = "com.example.Locify.LOCATION_UPDATE"
+                    putExtra("latitude", location.latitude)
+                    putExtra("longitude", location.longitude)
+                }
+                sendBroadcast(intent)
+
+                // Also directly check reminders
+                checkLocationBasedReminders(location)
+
+                // Update service notification with better info if needed
+                if (isFirstRun) {
+                    isFirstRun = false
+                    // Could update the notification here if needed
+                }
             }
             .launchIn(serviceScope)
     }
 
-    private fun processLocationUpdate(location: Location) {
+    private fun checkLocationBasedReminders(location: Location) {
         serviceScope.launch {
-            // Get all active reminders
-            val reminders = reminderDao.getAllIncompleteReminders()
-
-            for (reminder in reminders) {
-                // Check if reminder should be triggered
-                if (alarmManager.checkReminderTrigger(location, reminder)) {
-                    alarmManager.triggerReminder(reminder)
-                }
-
-                // Check if user moved away and should be re-alerted
-                if (alarmManager.checkUserMovedAwayFromReminder(location, reminder)) {
-                    // Re-trigger the alarm for this reminder
-                    val tasks = taskDao.getTasksForReminder(reminder.id)
-                    notificationHelper.triggerFullScreenAlarm(reminder, tasks)
-                }
-            }
+            reminderManager.checkLocationBasedReminders(location)
         }
     }
 
     override fun onDestroy() {
         super.onDestroy()
         serviceScope.cancel()
-        isRunning = false
+    }
 
-        // Remove the notification
-        NotificationManagerCompat.from(this).cancel(1000)
+    companion object {
+        const val ACTION_STOP_SERVICE = "com.example.Locify.STOP_LOCATION_SERVICE"
+
+        @RequiresApi(Build.VERSION_CODES.O)
+        fun startService(context: Context) {
+            val intent = Intent(context, LocationMonitoringService::class.java)
+            context.startForegroundService(intent)
+        }
+
+        fun stopService(context: Context) {
+            val intent = Intent(context, LocationMonitoringService::class.java).apply {
+                action = ACTION_STOP_SERVICE
+            }
+            context.startService(intent)
+        }
     }
 }

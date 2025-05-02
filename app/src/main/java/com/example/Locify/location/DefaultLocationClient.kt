@@ -5,29 +5,23 @@ import android.content.Context
 import android.location.Location
 import android.location.LocationManager
 import android.os.Looper
-import com.google.android.gms.location.FusedLocationProviderClient
-import com.google.android.gms.location.LocationCallback
-import com.google.android.gms.location.LocationRequest
-import com.google.android.gms.location.LocationResult
-import com.google.android.gms.location.Priority
 import com.example.Locify.utility.LocationUtils
-import com.example.Locify.utility.PermissionHandler
+import com.google.android.gms.location.*
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
 import javax.inject.Inject
+import kotlin.coroutines.resume
 
 class DefaultLocationClient @Inject constructor(
     private val context: Context,
-    private val client: FusedLocationProviderClient,
-    private val permissionHandler: PermissionHandler,
-    private val locationUtils: LocationUtils
+    private val client: FusedLocationProviderClient
 ) : LocationClient {
 
     @SuppressLint("MissingPermission")
     override fun getLocationUpdates(interval: Long): Flow<Location> = callbackFlow {
-        if (!permissionHandler.hasLocationPermissions()) {
+        if (!LocationUtils.hasLocationPermissions(context)) {
             throw LocationClient.LocationException("Missing location permissions")
         }
 
@@ -39,17 +33,16 @@ class DefaultLocationClient @Inject constructor(
             throw LocationClient.LocationException("GPS is disabled")
         }
 
-        val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, interval)
-            .setWaitForAccurateLocation(false)
-            .setMinUpdateIntervalMillis(interval)
-            .setMaxUpdateDelayMillis(interval * 2)
-            .build()
+        val request = LocationRequest.create()
+            .setInterval(interval)
+            .setFastestInterval(interval)
+            .setPriority(LocationRequest.PRIORITY_HIGH_ACCURACY)
 
         val locationCallback = object : LocationCallback() {
             override fun onLocationResult(result: LocationResult) {
                 super.onLocationResult(result)
                 result.locations.lastOrNull()?.let { location ->
-                    launch { send(location) }
+                    trySend(location)
                 }
             }
         }
@@ -67,73 +60,52 @@ class DefaultLocationClient @Inject constructor(
 
     @SuppressLint("MissingPermission")
     override suspend fun getCurrentLocation(): Location? {
-        if (!permissionHandler.hasLocationPermissions()) {
+        if (!LocationUtils.hasLocationPermissions(context)) {
             throw LocationClient.LocationException("Missing location permissions")
         }
 
-        val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
-        val isGpsEnabled = locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)
-        val isNetworkEnabled = locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)
+        return suspendCancellableCoroutine { cont ->
+            client.lastLocation.addOnCompleteListener { task ->
+                if (task.isSuccessful && task.result != null) {
+                    cont.resume(task.result)
+                } else {
+                    // If last location is null, request a new location
+                    val request = LocationRequest.create()
+                        .setPriority(LocationRequest.PRIORITY_HIGH_ACCURACY)
+                        .setNumUpdates(1)
+                        .setExpirationDuration(10000)
 
-        if (!isGpsEnabled && !isNetworkEnabled) {
-            throw LocationClient.LocationException("GPS is disabled")
-        }
+                    val locationCallback = object : LocationCallback() {
+                        override fun onLocationResult(locationResult: LocationResult) {
+                            super.onLocationResult(locationResult)
+                            locationResult.lastLocation?.let { location ->
+                                cont.resume(location)
+                                client.removeLocationUpdates(this)
+                            }
+                        }
+                    }
 
-        return try {
-            client.lastLocation.await()
-        } catch (e: Exception) {
-            null
-        }
-    }
+                    client.requestLocationUpdates(
+                        request,
+                        locationCallback,
+                        Looper.getMainLooper()
+                    )
 
-    @SuppressLint("MissingPermission")
-    override fun startLocationUpdates(interval: Long, callback: (Location) -> Unit): LocationCallback {
-        if (!permissionHandler.hasLocationPermissions()) {
-            throw LocationClient.LocationException("Missing location permissions")
-        }
-
-        val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
-        val isGpsEnabled = locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)
-        val isNetworkEnabled = locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)
-
-        if (!isGpsEnabled && !isNetworkEnabled) {
-            throw LocationClient.LocationException("GPS is disabled")
-        }
-
-        val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, interval)
-            .setWaitForAccurateLocation(false)
-            .setMinUpdateIntervalMillis(interval)
-            .setMaxUpdateDelayMillis(interval * 2)
-            .build()
-
-        val locationCallback = object : LocationCallback() {
-            override fun onLocationResult(result: LocationResult) {
-                super.onLocationResult(result)
-                result.locations.lastOrNull()?.let { location ->
-                    callback(location)
+                    cont.invokeOnCancellation {
+                        client.removeLocationUpdates(locationCallback)
+                    }
                 }
             }
         }
-
-        client.requestLocationUpdates(
-            request,
-            locationCallback,
-            Looper.getMainLooper()
-        )
-
-        return locationCallback
     }
 
-    override fun stopLocationUpdates(callback: LocationCallback) {
-        client.removeLocationUpdates(callback)
+    override fun calculateDistance(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Float {
+        val results = FloatArray(1)
+        Location.distanceBetween(lat1, lon1, lat2, lon2, results)
+        return results[0]
     }
 
-    override suspend fun getDistanceBetween(startLat: Double, startLng: Double, endLat: Double, endLng: Double): Float {
-        return locationUtils.calculateDistance(startLat, startLng, endLat, endLng)
+    companion object {
+        class LocationException(message: String) : Exception(message)
     }
-}
-
-// Extension function to handle Task await
-private suspend fun <T> com.google.android.gms.tasks.Task<T>.await(): T {
-    return kotlinx.coroutines.tasks.await()
 }
