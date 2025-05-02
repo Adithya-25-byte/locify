@@ -67,6 +67,9 @@ dependencies {
     implementation("androidx.room:room-runtime:2.6.1")
     implementation("androidx.room:room-ktx:2.6.1")
     implementation(libs.firebase.crashlytics.buildtools)
+    implementation(libs.ads.mobile.sdk)
+    implementation(libs.androidx.appcompat)
+    implementation(libs.androidx.material3.android)
     kapt("androidx.room:room-compiler:2.6.1")
 
     // Hilt

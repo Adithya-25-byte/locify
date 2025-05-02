@@ -5,30 +5,22 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface FavoriteLocationDao {
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertFavoriteLocation(location: FavoriteLocation): Long
+
+    @Insert
+    suspend fun insertFavoriteLocation(favoriteLocation: FavoriteLocation): Long
 
     @Update
-    suspend fun updateFavoriteLocation(location: FavoriteLocation)
+    suspend fun updateFavoriteLocation(favoriteLocation: FavoriteLocation)
 
     @Delete
-    suspend fun deleteFavoriteLocation(location: FavoriteLocation)
+    suspend fun deleteFavoriteLocation(favoriteLocation: FavoriteLocation)
 
-    @Query("SELECT * FROM favorite_locations ORDER BY name ASC")
+    @Query("SELECT * FROM favorite_locations ORDER BY creationTimestamp DESC")
     fun getAllFavoriteLocations(): Flow<List<FavoriteLocation>>
-
-    @Query("SELECT * FROM favorite_locations ORDER BY usageCount DESC LIMIT :limit")
-    fun getMostUsedLocations(limit: Int): Flow<List<FavoriteLocation>>
 
     @Query("SELECT * FROM favorite_locations WHERE id = :id")
     suspend fun getFavoriteLocationById(id: Long): FavoriteLocation?
 
-    @Query("UPDATE favorite_locations SET usageCount = usageCount + 1 WHERE id = :locationId")
-    suspend fun incrementUsageCount(locationId: Long)
-
-    @Query("SELECT * FROM favorite_locations WHERE " +
-            "name LIKE '%' || :query || '%' OR " +
-            "address LIKE '%' || :query || '%' " +
-            "ORDER BY usageCount DESC LIMIT 10")
+    @Query("SELECT * FROM favorite_locations WHERE name LIKE '%' || :query || '%' OR address LIKE '%' || :query || '%'")
     suspend fun searchFavoriteLocations(query: String): List<FavoriteLocation>
 }
