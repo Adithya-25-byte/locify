@@ -1,19 +1,9 @@
 package com.example.Locify.data
 
-import androidx.lifecycle.LiveData
-import androidx.room.Dao
-import androidx.room.Delete
-import androidx.room.Insert
-import androidx.room.OnConflictStrategy
-import androidx.room.Query
-import androidx.room.Transaction
-import androidx.room.Update
+import androidx.room.*
 import kotlinx.coroutines.flow.Flow
 import java.time.LocalDateTime
 
-/**
- * Data Access Object for Reminder entities with enhanced queries
- */
 @Dao
 interface ReminderDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
@@ -25,52 +15,44 @@ interface ReminderDao {
     @Delete
     suspend fun deleteReminder(reminder: Reminder)
 
-    @Query("SELECT * FROM reminders WHERE id = :reminderId")
-    suspend fun getReminderById(reminderId: Long): Reminder?
-
     @Query("SELECT * FROM reminders ORDER BY createdAt DESC")
     fun getAllReminders(): Flow<List<Reminder>>
 
     @Query("SELECT * FROM reminders WHERE isCompleted = 0 ORDER BY createdAt DESC")
     fun getActiveReminders(): Flow<List<Reminder>>
 
-    @Query("SELECT * FROM reminders WHERE isCompleted = 1 ORDER BY modifiedAt DESC")
+    @Query("SELECT * FROM reminders WHERE isCompleted = 1 ORDER BY updatedAt DESC")
     fun getCompletedReminders(): Flow<List<Reminder>>
 
-    @Query("SELECT * FROM reminders WHERE isFavorite = 1 ORDER BY createdAt DESC")
+    @Query("SELECT * FROM reminders WHERE id = :id")
+    suspend fun getReminderById(id: Long): Reminder?
+
+    @Query("SELECT * FROM reminders WHERE isLocationBased = 1 AND isCompleted = 0")
+    fun getActiveLocationBasedReminders(): Flow<List<Reminder>>
+
+    @Query("SELECT * FROM reminders WHERE isTimeBased = 1 AND hasTimeConstraint = 1 AND isCompleted = 0")
+    fun getActiveTimeBasedReminders(): Flow<List<Reminder>>
+
+    @Query("SELECT * FROM reminders WHERE isFavorite = 1 ORDER BY title ASC")
     fun getFavoriteReminders(): Flow<List<Reminder>>
 
-    // Location-based queries
-    @Query("SELECT * FROM reminders WHERE latitude IS NOT NULL AND longitude IS NOT NULL AND isCompleted = 0")
-    suspend fun getLocationBasedReminders(): List<Reminder>
-
-    // Time-based queries
-    @Query("SELECT * FROM reminders WHERE hasTimeConstraint = 1 AND scheduledDateTime IS NOT NULL AND isCompleted = 0")
-    suspend fun getTimeBasedReminders(): List<Reminder>
-
-    @Query("SELECT * FROM reminders WHERE hasTimeConstraint = 1 AND scheduledDateTime <= :currentTime AND isCompleted = 0")
-    suspend fun getDueReminders(currentTime: LocalDateTime): List<Reminder>
-
-    // Feature-specific queries
-    @Query("SELECT * FROM reminders WHERE remindOnUnlock = 1 AND isCompleted = 0")
-    suspend fun getRemindOnUnlockReminders(): List<Reminder>
-
-    @Query("SELECT * FROM reminders WHERE isRepeating = 1")
-    suspend fun getRepeatingReminders(): List<Reminder>
-
-    @Query("UPDATE reminders SET isCompleted = :isCompleted, modifiedAt = :modifiedAt WHERE id = :reminderId")
-    suspend fun updateReminderCompletionStatus(reminderId: Long, isCompleted: Boolean, modifiedAt: LocalDateTime)
+    @Query("UPDATE reminders SET isCompleted = :isCompleted, updatedAt = :updatedAt WHERE id = :reminderId")
+    suspend fun updateReminderCompletionStatus(reminderId: Long, isCompleted: Boolean, updatedAt: LocalDateTime)
 
     @Query("UPDATE reminders SET isFavorite = :isFavorite WHERE id = :reminderId")
-    suspend fun updateFavoriteStatus(reminderId: Long, isFavorite: Boolean)
+    suspend fun updateReminderFavoriteStatus(reminderId: Long, isFavorite: Boolean)
 
-    // Combined reminder updates in a transaction
-    @Transaction
-    suspend fun updateReminderWithTasks(reminder: Reminder, tasks: List<Task>, taskDao: TaskDao) {
-        updateReminder(reminder)
-        taskDao.deleteTasksForReminder(reminder.id)
-        tasks.forEach { task ->
-            taskDao.insertTask(task.copy(reminderId = reminder.id))
-        }
-    }
+    // For time-based reminders that need to be triggered
+    @Query("SELECT * FROM reminders WHERE isTimeBased = 1 AND hasTimeConstraint = 1 AND isCompleted = 0 AND scheduledTime <= :currentTime")
+    suspend fun getRemindersToTrigger(currentTime: LocalDateTime): List<Reminder>
+
+    // For location-based reminders within a specific area
+    @Query("SELECT * FROM reminders WHERE isLocationBased = 1 AND isCompleted = 0 AND " +
+            "(:latitude BETWEEN latitude - (:maxDistance / 111111) AND latitude + (:maxDistance / 111111)) AND " +
+            "(:longitude BETWEEN longitude - (:maxDistance / (111111 * COS(latitude * 3.14159 / 180))) AND longitude + (:maxDistance / (111111 * COS(latitude * 3.14159 / 180))))")
+    suspend fun getRemindersNearLocation(latitude: Double, longitude: Double, maxDistance: Float): List<Reminder>
+
+    // For handling repeated reminders
+    @Query("SELECT * FROM reminders WHERE isRepeating = 1 AND isCompleted = 1")
+    suspend fun getCompletedRepeatingReminders(): List<Reminder>
 }

@@ -3,56 +3,36 @@ package com.example.Locify.data
 import android.os.Build
 import androidx.annotation.RequiresApi
 import androidx.room.TypeConverter
-import com.google.firebase.crashlytics.buildtools.reloc.com.google.common.reflect.TypeToken
-import com.google.gson.Gson
-import com.google.gson.reflect.TypeToken
-import com.example.Locify.data.RepeatInterval
 import java.time.LocalDateTime
-import java.time.ZoneOffset
+import java.time.format.DateTimeFormatter
 
-/**
- * Type converters for Room database to handle complex data types
- */
 class Converters {
-    private val gson = Gson()
-
-    // LocalDateTime converters
     @RequiresApi(Build.VERSION_CODES.O)
-    @TypeConverter
-    fun fromTimestamp(value: Long?): LocalDateTime? {
-        return value?.let { LocalDateTime.ofEpochSecond(it, 0, ZoneOffset.UTC) }
-    }
+    private val formatter = DateTimeFormatter.ISO_LOCAL_DATE_TIME
 
     @RequiresApi(Build.VERSION_CODES.O)
     @TypeConverter
-    fun dateToTimestamp(date: LocalDateTime?): Long? {
-        return date?.toEpochSecond(ZoneOffset.UTC)
+    fun fromTimestamp(value: String?): LocalDateTime? {
+        return value?.let { LocalDateTime.parse(it, formatter) }
     }
 
-    // List<Int> converters (for repeat custom days)
+    @RequiresApi(Build.VERSION_CODES.O)
     @TypeConverter
-    fun fromIntList(value: List<Int>?): String {
-        return gson.toJson(value ?: emptyList<Int>())
+    fun dateToTimestamp(date: LocalDateTime?): String? {
+        return date?.format(formatter)
     }
 
     @TypeConverter
-    fun toIntList(value: String): List<Int> {
-        val listType = object : TypeToken<List<Int>>() {}.type
-        return gson.fromJson(value, listType) ?: emptyList()
-    }
-
-    // RepeatInterval converters
-    @TypeConverter
-    fun fromRepeatInterval(value: RepeatInterval): String {
+    fun fromRepeatType(value: RepeatType): String {
         return value.name
     }
 
     @TypeConverter
-    fun toRepeatInterval(value: String): RepeatInterval {
+    fun toRepeatType(value: String): RepeatType {
         return try {
-            RepeatInterval.valueOf(value)
+            RepeatType.valueOf(value)
         } catch (e: IllegalArgumentException) {
-            RepeatInterval.NEVER
+            RepeatType.NONE
         }
     }
 }

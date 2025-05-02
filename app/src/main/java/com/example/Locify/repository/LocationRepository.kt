@@ -1,96 +1,115 @@
-package example.Locify.repository
+package com.example.Locify.repository
 
-import com.example.Locify.location.LocationClient
+import android.location.Address
+import android.location.Geocoder
 import com.example.Locify.data.FavoriteLocation
-import com.example.Locify.data.FavoriteLocationDao
+import com.example.Locify.location.LocationClient
 import kotlinx.coroutines.flow.Flow
-import java.time.LocalDateTime
+import kotlinx.coroutines.flow.first
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/**
- * Repository for handling all location-related operations
- */
 @Singleton
 class LocationRepository @Inject constructor(
-    private val favoriteLocationDao: FavoriteLocationDao,
-    private val locationClient: LocationClient
+    private val locationClient: LocationClient,
+    private val geocoder: Geocoder,
+    private val favoritesRepository: FavoritesRepository
 ) {
-    // Favorite Location Operations
-    fun getAllFavoriteLocations(): Flow<List<FavoriteLocation>> =
-        favoriteLocationDao.getAllFavoriteLocations()
+    // Get current location
+    fun getCurrentLocation() = locationClient.getLocationUpdates(100L)
 
-    fun getMostUsedLocations(limit: Int = 5): Flow<List<FavoriteLocation>> =
-        favoriteLocationDao.getMostUsedLocations(limit)
+    suspend fun getLastKnownLocation() = locationClient.getCurrentLocation()
 
-    fun getRecentlyUsedLocations(limit: Int = 5): Flow<List<FavoriteLocation>> =
-        favoriteLocationDao.getRecentlyUsedLocations(limit)
-
-    fun getFavoriteLocationsByCategory(category: String): Flow<List<FavoriteLocation>> =
-        favoriteLocationDao.getFavoriteLocationsByCategory(category)
-
-    fun getAllCategories(): Flow<List<String>> = favoriteLocationDao.getAllCategories()
-
-    fun searchFavoriteLocations(query: String): Flow<List<FavoriteLocation>> =
-        favoriteLocationDao.searchFavoriteLocations(query)
-
-    suspend fun getFavoriteLocationById(locationId: Long): FavoriteLocation? =
-        favoriteLocationDao.getFavoriteLocationById(locationId)
-
-    suspend fun saveFavoriteLocation(favoriteLocation: FavoriteLocation): Long =
-        favoriteLocationDao.insertFavoriteLocation(favoriteLocation)
-
-    suspend fun updateFavoriteLocation(favoriteLocation: FavoriteLocation) =
-        favoriteLocationDao.updateFavoriteLocation(favoriteLocation)
-
-    suspend fun deleteFavoriteLocation(favoriteLocation: FavoriteLocation) =
-        favoriteLocationDao.deleteFavoriteLocation(favoriteLocation)
-
-    suspend fun incrementLocationUsage(locationId: Long) =
-        favoriteLocationDao.incrementUsageCount(locationId, LocalDateTime.now())
-
-    // Current Location Operations
-    suspend fun getCurrentLocation() = locationClient.getCurrentLocation()
-
-    suspend fun requestLocationUpdates(intervalMs: Long = 5000L) =
-        locationClient.startLocationUpdates(intervalMs)
-
-    fun stopLocationUpdates() = locationClient.stopLocationUpdates()
-
-    // Location Search Operations (will be implemented with the search feature)
-    suspend fun searchLocationsByName(query: String): List<LocationSearchResult> {
-        // This will be implemented when we add the search feature
-        // For now, return an empty list
-        return emptyList()
+    // Geocoding operations
+    suspend fun getAddressFromLocation(latitude: Double, longitude: Double): Address? {
+        return try {
+            val addresses = geocoder.getFromLocation(latitude, longitude, 1)
+            addresses?.firstOrNull()
+        } catch (e: Exception) {
+            null
+        }
     }
 
-    suspend fun getLocationDetails(placeId: String): LocationDetails? {
-        // This will be implemented when we add the search feature
-        return null
+    suspend fun getLocationFromAddress(address: String): Address? {
+        return try {
+            val addresses = geocoder.getFromLocationName(address, 1)
+            addresses?.firstOrNull()
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    // Combine with favorites for search
+    suspend fun searchLocations(query: String): List<LocationSearchResult> {
+        val results = mutableListOf<LocationSearchResult>()
+
+        // First add favorite locations matching the query
+        val favoriteResults = favoritesRepository.searchFavoriteLocations(query)
+        results.addAll(favoriteResults.map {
+            LocationSearchResult(
+                name = it.name,
+                address = it.address,
+                latitude = it.latitude,
+                longitude = it.longitude,
+                isFavorite = true,
+                favoriteId = it.id
+            )
+        })
+
+        // Then add geocoded results if not too many favorites
+        if (results.size < 5) {
+            try {
+                val addresses = geocoder.getFromLocationName(query, 5 - results.size)
+                addresses?.forEach { address ->
+                    // Check if this address is already in results (from favorites)
+                    val lat = address.latitude
+                    val lng = address.longitude
+                    val exists = results.any {
+                        Math.abs(it.latitude - lat) < 0.0001 &&
+                                Math.abs(it.longitude - lng) < 0.0001
+                    }
+
+                    if (!exists) {
+                        results.add(
+                            LocationSearchResult(
+                                name = address.featureName ?: "",
+                                address = address.getAddressLine(0) ?: "",
+                                latitude = lat,
+                                longitude = lng,
+                                isFavorite = false,
+                                favoriteId = null
+                            )
+                        )
+                    }
+                }
+            } catch (e: Exception) {
+                // Geocoding failed, just continue with what we have
+            }
+        }
+
+        return results
+    }
+
+    // Helper function to check if location is within certain radius
+    fun isWithinRadius(
+        lat1: Double,
+        lon1: Double,
+        lat2: Double,
+        lon2: Double,
+        radiusInMeters: Float
+    ): Boolean {
+        val results = FloatArray(1)
+        android.location.Location.distanceBetween(lat1, lon1, lat2, lon2, results)
+        return results[0] <= radiusInMeters
     }
 }
 
-/**
- * Data class representing a location search result
- */
+// Model for location search results
 data class LocationSearchResult(
-    val placeId: String,
-    val name: String,
-    val address: String,
-    val latitude: Double,
-    val longitude: Double
-)
-
-/**
- * Data class representing detailed location information
- */
-data class LocationDetails(
-    val placeId: String,
     val name: String,
     val address: String,
     val latitude: Double,
     val longitude: Double,
-    val phoneNumber: String? = null,
-    val website: String? = null,
-    val types: List<String> = emptyList()
+    val isFavorite: Boolean,
+    val favoriteId: Long? = null
 )

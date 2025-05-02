@@ -6,10 +6,6 @@ import androidx.room.Index
 import androidx.room.PrimaryKey
 import java.time.LocalDateTime
 
-/**
- * Entity representing a task within a reminder.
- * Each reminder can have multiple tasks (checkboxes).
- */
 @Entity(
     tableName = "tasks",
     foreignKeys = [
@@ -25,18 +21,10 @@ import java.time.LocalDateTime
 data class Task(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,
-
-    // Foreign key to parent reminder
     val reminderId: Long,
-
-    // Task details
     val description: String,
     val isCompleted: Boolean = false,
-
-    // Order within the reminder's task list
-    val orderPosition: Int = 0,
-
-    // Timestamps
+    val order: Int, // For ordering tasks within a reminder
     val createdAt: LocalDateTime = LocalDateTime.now(),
     val completedAt: LocalDateTime? = null
 )

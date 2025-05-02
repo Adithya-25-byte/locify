@@ -5,14 +5,7 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
-import androidx.sqlite.db.SupportSQLiteDatabase
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 
-/**
- * Room database for the Locify app
- */
 @Database(
     entities = [
         Reminder::class,
@@ -24,7 +17,6 @@ import kotlinx.coroutines.launch
 )
 @TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() {
-
     abstract fun reminderDao(): ReminderDao
     abstract fun taskDao(): TaskDao
     abstract fun favoriteLocationDao(): FavoriteLocationDao
@@ -40,19 +32,10 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "locify_database"
                 )
-                    .addCallback(DatabaseCallback())
                     .fallbackToDestructiveMigration()
                     .build()
-
                 INSTANCE = instance
                 instance
-            }
-        }
-
-        private class DatabaseCallback : RoomDatabase.Callback() {
-            override fun onCreate(db: SupportSQLiteDatabase) {
-                super.onCreate(db)
-                // If needed, we can pre-populate the database here
             }
         }
     }

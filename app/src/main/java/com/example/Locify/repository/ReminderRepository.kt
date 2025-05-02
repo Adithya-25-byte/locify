@@ -4,108 +4,114 @@ import com.example.Locify.data.Reminder
 import com.example.Locify.data.ReminderDao
 import com.example.Locify.data.Task
 import com.example.Locify.data.TaskDao
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.withContext
 import java.time.LocalDateTime
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/**
- * Repository for handling all reminder-related operations
- */
 @Singleton
 class ReminderRepository @Inject constructor(
     private val reminderDao: ReminderDao,
     private val taskDao: TaskDao
 ) {
-    // Basic Reminder Operations
+    // Reminder operations
     fun getAllReminders(): Flow<List<Reminder>> = reminderDao.getAllReminders()
 
     fun getActiveReminders(): Flow<List<Reminder>> = reminderDao.getActiveReminders()
 
     fun getCompletedReminders(): Flow<List<Reminder>> = reminderDao.getCompletedReminders()
 
+    fun getActiveLocationBasedReminders(): Flow<List<Reminder>> =
+        reminderDao.getActiveLocationBasedReminders()
+
+    fun getActiveTimeBasedReminders(): Flow<List<Reminder>> =
+        reminderDao.getActiveTimeBasedReminders()
+
     fun getFavoriteReminders(): Flow<List<Reminder>> = reminderDao.getFavoriteReminders()
 
-    suspend fun getReminderById(reminderId: Long): Reminder? = reminderDao.getReminderById(reminderId)
+    suspend fun getReminderById(id: Long): Reminder? = reminderDao.getReminderById(id)
 
-    suspend fun getLocationBasedReminders(): List<Reminder> = reminderDao.getLocationBasedReminders()
+    suspend fun insertReminder(reminder: Reminder): Long = reminderDao.insertReminder(reminder)
 
-    suspend fun getTimeBasedReminders(): List<Reminder> = reminderDao.getTimeBasedReminders()
+    suspend fun updateReminder(reminder: Reminder) = reminderDao.updateReminder(reminder)
 
-    suspend fun getDueReminders(): List<Reminder> =
-        reminderDao.getDueReminders(LocalDateTime.now())
+    suspend fun deleteReminder(reminder: Reminder) {
+        // Delete associated tasks first
+        taskDao.deleteTasksForReminder(reminder.id)
+        reminderDao.deleteReminder(reminder)
+    }
 
-    suspend fun getRemindOnUnlockReminders(): List<Reminder> =
-        reminderDao.getRemindOnUnlockReminders()
+    suspend fun updateReminderCompletionStatus(reminderId: Long, isCompleted: Boolean) {
+        reminderDao.updateReminderCompletionStatus(
+            reminderId = reminderId,
+            isCompleted = isCompleted,
+            updatedAt = LocalDateTime.now()
+        )
+    }
 
-    // Task Operations
+    suspend fun toggleReminderFavoriteStatus(reminderId: Long, isFavorite: Boolean) {
+        reminderDao.updateReminderFavoriteStatus(reminderId, isFavorite)
+    }
+
+    suspend fun getRemindersToTrigger(): List<Reminder> =
+        reminderDao.getRemindersToTrigger(LocalDateTime.now())
+
+    suspend fun getRemindersNearLocation(
+        latitude: Double,
+        longitude: Double,
+        maxDistance: Float
+    ): List<Reminder> = reminderDao.getRemindersNearLocation(latitude, longitude, maxDistance)
+
+    suspend fun getCompletedRepeatingReminders(): List<Reminder> =
+        reminderDao.getCompletedRepeatingReminders()
+
+    // Task operations
     fun getTasksForReminder(reminderId: Long): Flow<List<Task>> =
         taskDao.getTasksForReminder(reminderId)
 
-    suspend fun getTasksForReminderImmediate(reminderId: Long): List<Task> =
-        taskDao.getTasksForReminderImmediate(reminderId)
+    fun getIncompleteTasksForReminder(reminderId: Long): Flow<List<Task>> =
+        taskDao.getIncompleteTasksForReminder(reminderId)
 
-    suspend fun getTaskById(taskId: Long): Task? = taskDao.getTaskById(taskId)
+    fun getIncompleteTaskCountForReminder(reminderId: Long): Flow<Int> =
+        taskDao.getIncompleteTaskCountForReminder(reminderId)
 
     suspend fun insertTask(task: Task): Long = taskDao.insertTask(task)
+
+    suspend fun insertTasks(tasks: List<Task>): List<Long> = taskDao.insertTasks(tasks)
 
     suspend fun updateTask(task: Task) = taskDao.updateTask(task)
 
     suspend fun deleteTask(task: Task) = taskDao.deleteTask(task)
 
-    // Combined Operations
-    suspend fun saveReminderWithTasks(reminder: Reminder, tasks: List<Task>): Long {
+    suspend fun updateTaskCompletionStatus(taskId: Long, isCompleted: Boolean) {
+        val completedAt = if (isCompleted) LocalDateTime.now().toString() else null
+        taskDao.updateTaskCompletionStatus(taskId, isCompleted, completedAt)
+    }
+
+    // Combined operations
+    suspend fun insertReminderWithTasks(
+        reminder: Reminder,
+        taskDescriptions: List<String>
+    ): Long = withContext(Dispatchers.IO) {
         val reminderId = reminderDao.insertReminder(reminder)
 
-        // Insert tasks with the new reminderId
-        tasks.forEach { task ->
-            taskDao.insertTask(task.copy(reminderId = reminderId))
+        val tasks = taskDescriptions.mapIndexed { index, description ->
+            Task(
+                reminderId = reminderId,
+                description = description,
+                order = index,
+                isCompleted = false
+            )
         }
 
-        return reminderId
+        taskDao.insertTasks(tasks)
+        reminderId
     }
 
-    suspend fun updateReminderWithTasks(reminder: Reminder, tasks: List<Task>) {
-        reminderDao.updateReminderWithTasks(reminder, tasks, taskDao)
-    }
-
-    suspend fun deleteReminder(reminder: Reminder) {
-        // The cascade delete will handle removing associated tasks
-        reminderDao.deleteReminder(reminder)
-    }
-
-    // Status Updates
-    suspend fun updateReminderCompletionStatus(reminderId: Long, isCompleted: Boolean) {
-        reminderDao.updateReminderCompletionStatus(
-            reminderId,
-            isCompleted,
-            LocalDateTime.now()
-        )
-    }
-
-    suspend fun updateTaskCompletionStatus(taskId: Long, isCompleted: Boolean) {
-        val completedAt = if (isCompleted) LocalDateTime.now() else null
-        taskDao.updateTaskCompletionStatus(
-            taskId,
-            isCompleted,
-            completedAt?.toEpochSecond(java.time.ZoneOffset.UTC)
-        )
-
-        // Check if all tasks are completed to update the reminder status
-        val task = taskDao.getTaskById(taskId) ?: return
-        val allTasks = taskDao.getTasksForReminderImmediate(task.reminderId)
-        val allCompleted = allTasks.all { it.isCompleted }
-
-        if (allCompleted) {
-            updateReminderCompletionStatus(task.reminderId, true)
-        } else {
-            // If any task is not completed, ensure reminder is marked as not completed
-            updateReminderCompletionStatus(task.reminderId, false)
-        }
-    }
-
-    suspend fun toggleFavoriteStatus(reminderId: Long) {
-        val reminder = reminderDao.getReminderById(reminderId) ?: return
-        reminderDao.updateFavoriteStatus(reminderId, !reminder.isFavorite)
+    suspend fun isReminderCompleted(reminderId: Long): Boolean {
+        val incompleteCount = taskDao.getIncompleteTaskCountForReminder(reminderId).hashCode()
+        return incompleteCount == 0
     }
 }
