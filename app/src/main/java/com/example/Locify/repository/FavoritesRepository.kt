@@ -1,37 +1,41 @@
 package com.example.Locify.repository
 
-import com.example.Locify.data.FavoriteLocation
-import com.example.Locify.data.FavoriteLocationDao
-import kotlinx.coroutines.flow.Flow
+import com.example.Locify.data.FavoriteReminder
+import com.example.Locify.data.FavoriteReminderDao
+import com.example.Locify.data.Reminder
 import javax.inject.Inject
-import javax.inject.Singleton
 
-@Singleton
 class FavoritesRepository @Inject constructor(
-    private val favoriteLocationDao: FavoriteLocationDao
+    private val favoriteReminderDao: FavoriteReminderDao
 ) {
-    // Favorite location operations
-    fun getAllFavoriteLocations(): Flow<List<FavoriteLocation>> =
-        favoriteLocationDao.getAllFavoriteLocations()
+    val allFavoriteReminders = favoriteReminderDao.getAllFavoriteReminders()
 
-    fun getMostUsedLocations(limit: Int): Flow<List<FavoriteLocation>> =
-        favoriteLocationDao.getMostUsedLocations(limit)
+    suspend fun insertFavoriteReminder(favoriteReminder: FavoriteReminder): Long {
+        return favoriteReminderDao.insert(favoriteReminder)
+    }
 
-    suspend fun getFavoriteLocationById(id: Long): FavoriteLocation? =
-        favoriteLocationDao.getFavoriteLocationById(id)
+    suspend fun updateFavoriteReminder(favoriteReminder: FavoriteReminder) {
+        favoriteReminderDao.update(favoriteReminder)
+    }
 
-    suspend fun insertFavoriteLocation(location: FavoriteLocation): Long =
-        favoriteLocationDao.insertFavoriteLocation(location)
+    suspend fun deleteFavoriteReminder(favoriteReminder: FavoriteReminder) {
+        favoriteReminderDao.delete(favoriteReminder)
+    }
 
-    suspend fun updateFavoriteLocation(location: FavoriteLocation) =
-        favoriteLocationDao.updateFavoriteLocation(location)
+    suspend fun getFavoriteReminderById(id: Long): FavoriteReminder? {
+        return favoriteReminderDao.getFavoriteReminderById(id)
+    }
 
-    suspend fun deleteFavoriteLocation(location: FavoriteLocation) =
-        favoriteLocationDao.deleteFavoriteLocation(location)
-
-    suspend fun incrementLocationUsage(locationId: Long) =
-        favoriteLocationDao.incrementUsageCount(locationId)
-
-    suspend fun searchFavoriteLocations(query: String): List<FavoriteLocation> =
-        favoriteLocationDao.searchFavoriteLocations(query)
+    suspend fun convertFavoriteToReminder(favoriteReminder: FavoriteReminder): Reminder {
+        return Reminder(
+            title = favoriteReminder.title,
+            description = favoriteReminder.description,
+            latitude = favoriteReminder.latitude ?: 0.0,
+            longitude = favoriteReminder.longitude ?: 0.0,
+            locationName = favoriteReminder.locationName ?: "",
+            isLocationBased = favoriteReminder.isLocationBased,
+            isTimeBased = favoriteReminder.isTimeBased,
+            remindWhenUnlock = favoriteReminder.remindWhenUnlock
+        )
+    }
 }
