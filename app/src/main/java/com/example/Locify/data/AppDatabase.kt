@@ -10,7 +10,8 @@ import androidx.room.TypeConverters
     entities = [
         Reminder::class,
         Task::class,
-        FavoriteLocation::class
+        FavoriteLocation::class,
+        FavoriteReminder::class
     ],
     version = 1,
     exportSchema = false
@@ -20,6 +21,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun reminderDao(): ReminderDao
     abstract fun taskDao(): TaskDao
     abstract fun favoriteLocationDao(): FavoriteLocationDao
+    abstract fun favoriteReminderDao(): FavoriteReminderDao
 
     companion object {
         @Volatile
@@ -31,9 +33,7 @@ abstract class AppDatabase : RoomDatabase() {
                     context.applicationContext,
                     AppDatabase::class.java,
                     "locify_database"
-                )
-                    .fallbackToDestructiveMigration()
-                    .build()
+                ).build()
                 INSTANCE = instance
                 instance
             }

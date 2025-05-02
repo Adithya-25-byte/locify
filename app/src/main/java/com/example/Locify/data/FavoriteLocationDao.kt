@@ -1,26 +1,23 @@
 package com.example.Locify.data
 
+import androidx.lifecycle.LiveData
 import androidx.room.*
 import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface FavoriteLocationDao {
-
     @Insert
-    suspend fun insertFavoriteLocation(favoriteLocation: FavoriteLocation): Long
+    suspend fun insert(favoriteLocation: FavoriteLocation): Long
 
     @Update
-    suspend fun updateFavoriteLocation(favoriteLocation: FavoriteLocation)
+    suspend fun update(favoriteLocation: FavoriteLocation)
 
     @Delete
-    suspend fun deleteFavoriteLocation(favoriteLocation: FavoriteLocation)
+    suspend fun delete(favoriteLocation: FavoriteLocation)
 
-    @Query("SELECT * FROM favorite_locations ORDER BY creationTimestamp DESC")
-    fun getAllFavoriteLocations(): Flow<List<FavoriteLocation>>
+    @Query("SELECT * FROM favorite_locations ORDER BY name ASC")
+    fun getAllFavoriteLocations(): LiveData<List<FavoriteLocation>>
 
-    @Query("SELECT * FROM favorite_locations WHERE id = :id")
-    suspend fun getFavoriteLocationById(id: Long): FavoriteLocation?
-
-    @Query("SELECT * FROM favorite_locations WHERE name LIKE '%' || :query || '%' OR address LIKE '%' || :query || '%'")
+    @Query("SELECT * FROM favorite_locations WHERE name LIKE '%' || :query || '%'")
     suspend fun searchFavoriteLocations(query: String): List<FavoriteLocation>
 }

@@ -5,34 +5,16 @@ import androidx.annotation.RequiresApi
 import androidx.room.TypeConverter
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
+import java.util.Date
 
 class Converters {
-    @RequiresApi(Build.VERSION_CODES.O)
-    private val formatter = DateTimeFormatter.ISO_LOCAL_DATE_TIME
-
-    @RequiresApi(Build.VERSION_CODES.O)
     @TypeConverter
-    fun fromTimestamp(value: String?): LocalDateTime? {
-        return value?.let { LocalDateTime.parse(it, formatter) }
-    }
-
-    @RequiresApi(Build.VERSION_CODES.O)
-    @TypeConverter
-    fun dateToTimestamp(date: LocalDateTime?): String? {
-        return date?.format(formatter)
+    fun fromTimestamp(value: Long?): Date? {
+        return value?.let { Date(it) }
     }
 
     @TypeConverter
-    fun fromRepeatType(value: RepeatType): String {
-        return value.name
-    }
-
-    @TypeConverter
-    fun toRepeatType(value: String): RepeatType {
-        return try {
-            RepeatType.valueOf(value)
-        } catch (e: IllegalArgumentException) {
-            RepeatType.NONE
-        }
+    fun dateToTimestamp(date: Date?): Long? {
+        return date?.time
     }
 }
