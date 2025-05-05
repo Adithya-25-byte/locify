@@ -70,6 +70,7 @@ dependencies {
     implementation(libs.ads.mobile.sdk)
     implementation(libs.androidx.appcompat)
     implementation(libs.androidx.material3.android)
+    implementation(libs.places)
     kapt("androidx.room:room-compiler:2.6.1")
 
     // Hilt

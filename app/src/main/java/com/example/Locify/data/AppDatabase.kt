@@ -24,6 +24,8 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun favoriteReminderDao(): FavoriteReminderDao
 
     companion object {
+        private const val DATABASE_NAME = "locify_database"
+
         @Volatile
         private var INSTANCE: AppDatabase? = null
 
@@ -32,8 +34,10 @@ abstract class AppDatabase : RoomDatabase() {
                 val instance = Room.databaseBuilder(
                     context.applicationContext,
                     AppDatabase::class.java,
-                    "locify_database"
-                ).build()
+                    DATABASE_NAME
+                )
+                    .fallbackToDestructiveMigration()
+                    .build()
                 INSTANCE = instance
                 instance
             }

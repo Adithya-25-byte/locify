@@ -1,200 +1,194 @@
 package com.example.Locify
 
-import android.Manifest
-import android.annotation.SuppressLint
-import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
-import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.RequiresApi
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.filled.Place
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.core.content.ContextCompat
+import androidx.compose.ui.res.stringResource
+import androidx.navigation.NavDestination.Companion.hierarchy
+import androidx.navigation.NavGraph.Companion.findStartDestination
+import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import com.example.Locify.service.LocationMonitoringService
 import com.example.Locify.ui.screens.AddReminderScreen
+import com.example.Locify.ui.screens.EditReminderScreen
+import com.example.Locify.ui.screens.FavoritesScreen
+import com.example.Locify.ui.screens.PermissionRequestScreen
 import com.example.Locify.ui.screens.ReminderListScreen
+import com.example.Locify.ui.screens.ReminderMapScreen
 import com.example.Locify.ui.theme.LocifyTheme
+import com.example.Locify.utility.PermissionHandler
 import dagger.hilt.android.AndroidEntryPoint
+import javax.inject.Inject
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
 
-    // Separate background location permission as it needs special handling on Android 10+
-    private val foregroundPermissions = arrayOf(
-        Manifest.permission.ACCESS_FINE_LOCATION,
-        Manifest.permission.ACCESS_COARSE_LOCATION
-    )
+    @Inject
+    lateinit var permissionHandler: PermissionHandler
 
-    private val backgroundLocationPermission =
-        Manifest.permission.ACCESS_BACKGROUND_LOCATION
-
-    private val notificationPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-        Manifest.permission.POST_NOTIFICATIONS
-    } else {
-        ""
-    }
-
-    // Request foreground permissions first
-    private val foregroundLocationPermissionRequest = registerForActivityResult(
-        ActivityResultContracts.RequestMultiplePermissions()
-    ) { permissions ->
-        val allLocationGranted = foregroundPermissions.all { permission ->
-            permissions[permission] == true
-        }
-
-        if (allLocationGranted) {
-            // Request notification permission
-            if (notificationPermission.isNotEmpty()) {
-                notificationPermissionRequest.launch(notificationPermission)
-            }
-
-            // After foreground permissions granted, request background location permission
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                requestBackgroundLocationPermission()
-            } else {
-                // For older versions, start the service directly
-                startLocationService()
-            }
-        } else {
-            Toast.makeText(
-                this,
-                "Location permissions are needed for this app to work properly",
-                Toast.LENGTH_LONG
-            ).show()
-        }
-    }
-
-    // Handle notification permission request
-    private val notificationPermissionRequest = registerForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { isGranted ->
-        if (!isGranted && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            Toast.makeText(
-                this,
-                "Notification permission denied. You won't receive reminder alerts.",
-                Toast.LENGTH_LONG
-            ).show()
-        }
-    }
-
-    // Handle background location permission request
-    private val backgroundLocationPermissionRequest = registerForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { isGranted ->
-        if (isGranted) {
-            startLocationService()
-        } else {
-            Toast.makeText(
-                this,
-                "Background location permission denied. Reminders will only work when app is open.",
-                Toast.LENGTH_LONG
-            ).show()
-        }
-    }
-
-    @SuppressLint("NewApi")
     @RequiresApi(Build.VERSION_CODES.O)
+    @OptIn(ExperimentalMaterial3Api::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Request permissions immediately
-        requestPermissions()
-
         setContent {
             LocifyTheme {
+                val navController = rememberNavController()
+                var showFab by remember { mutableStateOf(true) }
+
+                // Check if permissions are granted
+                val arePermissionsGranted = permissionHandler.areLocationPermissionsGranted()
+
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    val navController = rememberNavController()
-
-                    NavHost(
-                        navController = navController,
-                        startDestination = "reminderList"
-                    ) {
-                        composable("reminderList") {
-                            ReminderListScreen(
-                                onAddReminderClick = {
-                                    navController.navigate("addReminder")
+                    Scaffold(
+                        bottomBar = {
+                            if (arePermissionsGranted) {
+                                BottomNavigation(navController)
+                            }
+                        },
+                        floatingActionButton = {
+                            if (showFab && arePermissionsGranted) {
+                                FloatingActionButton(
+                                    onClick = { navController.navigate(Screen.AddReminder.route) },
+                                    containerColor = MaterialTheme.colorScheme.primary
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Add,
+                                        contentDescription = stringResource(R.string.add_reminder)
+                                    )
                                 }
-                            )
+                            }
                         }
-                        composable("addReminder") {
-                            AddReminderScreen(
-                                onNavigateBack = {
-                                    navController.popBackStack()
-                                }
-                            )
+                    ) { innerPadding ->
+                        NavHost(
+                            navController = navController,
+                            startDestination = if (arePermissionsGranted) Screen.ReminderList.route else Screen.PermissionRequest.route,
+                            modifier = Modifier.padding(innerPadding)
+                        ) {
+                            composable(Screen.PermissionRequest.route) {
+                                showFab = false
+                                PermissionRequestScreen(
+                                    permissionHandler = permissionHandler,
+                                    onPermissionsGranted = {
+                                        navController.navigate(Screen.ReminderList.route) {
+                                            popUpTo(Screen.PermissionRequest.route) { inclusive = true }
+                                        }
+                                    }
+                                )
+                            }
+
+                            composable(Screen.ReminderList.route) {
+                                showFab = true
+                                ReminderListScreen(navController)
+                            }
+
+                            composable(Screen.ReminderMap.route) {
+                                showFab = true
+                                ReminderMapScreen(navController)
+                            }
+
+                            composable(Screen.Favorites.route) {
+                                showFab = true
+                                FavoritesScreen(navController)
+                            }
+
+                            composable("${Screen.AddReminder.route}?lat={lat}&lng={lng}") { backStackEntry ->
+                                showFab = false
+                                val lat = backStackEntry.arguments?.getString("lat")?.toDoubleOrNull()
+                                val lng = backStackEntry.arguments?.getString("lng")?.toDoubleOrNull()
+                                AddReminderScreen(
+                                    navController = navController,
+                                    initialLatitude = lat,
+                                    initialLongitude = lng
+                                )
+                            }
+
+                            composable("${Screen.EditReminder.route}/{reminderId}") { backStackEntry ->
+                                showFab = false
+                                val reminderId = backStackEntry.arguments?.getString("reminderId")?.toLongOrNull() ?: -1L
+                                EditReminderScreen(
+                                    navController = navController,
+                                    reminderId = reminderId
+                                )
+                            }
                         }
                     }
                 }
             }
         }
     }
+}
 
-    private fun requestPermissions() {
-        // Check if foreground location permissions are already granted
-        val foregroundPermissionsToRequest = foregroundPermissions.filter {
-            ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
-        }.toTypedArray()
+@Composable
+fun BottomNavigation(navController: NavHostController) {
+    val items = listOf(
+        Screen.ReminderList,
+        Screen.ReminderMap,
+        Screen.Favorites
+    )
 
-        if (foregroundPermissionsToRequest.isNotEmpty()) {
-            // Request foreground location permissions
-            foregroundLocationPermissionRequest.launch(foregroundPermissionsToRequest)
-        } else {
-            // If we already have foreground permissions, check for notification permission
-            if (notificationPermission.isNotEmpty() &&
-                ContextCompat.checkSelfPermission(this, notificationPermission) != PackageManager.PERMISSION_GRANTED) {
-                notificationPermissionRequest.launch(notificationPermission)
-            }
+    NavigationBar {
+        val navBackStackEntry by navController.currentBackStackEntryAsState()
+        val currentDestination = navBackStackEntry?.destination
 
-            // Check background permission
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                if (ContextCompat.checkSelfPermission(this, backgroundLocationPermission) !=
-                    PackageManager.PERMISSION_GRANTED) {
-                    requestBackgroundLocationPermission()
-                } else {
-                    startLocationService()
+        items.forEach { screen ->
+            NavigationBarItem(
+                icon = { Icon(screen.icon, contentDescription = null) },
+                label = { Text(stringResource(screen.resourceId)) },
+                selected = currentDestination?.hierarchy?.any { it.route == screen.route } == true,
+                onClick = {
+                    navController.navigate(screen.route) {
+                        // Pop up to the start destination of the graph to
+                        // avoid building up a large stack of destinations
+                        popUpTo(navController.graph.findStartDestination().id) {
+                            saveState = true
+                        }
+                        // Avoid multiple copies of the same destination when
+                        // reselecting the same item
+                        launchSingleTop = true
+                        // Restore state when reselecting a previously selected item
+                        restoreState = true
+                    }
                 }
-            } else {
-                // For older Android versions
-                startLocationService()
-            }
+            )
         }
     }
+}
 
-    private fun requestBackgroundLocationPermission() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            Toast.makeText(
-                this,
-                "Please grant background location access to receive location-based reminders even when the app is closed",
-                Toast.LENGTH_LONG
-            ).show()
-
-            backgroundLocationPermissionRequest.launch(backgroundLocationPermission)
-        }
-    }
-
-    private fun startLocationService() {
-        // Only start the service if we have the necessary permissions
-        if (ContextCompat.checkSelfPermission(
-                this,
-                Manifest.permission.ACCESS_FINE_LOCATION
-            ) == PackageManager.PERMISSION_GRANTED ||
-            ContextCompat.checkSelfPermission(
-                this,
-                Manifest.permission.ACCESS_COARSE_LOCATION
-            ) == PackageManager.PERMISSION_GRANTED
-        ) {
-            LocationMonitoringService.startService(this)
-        }
-    }
+sealed class Screen(val route: String, val resourceId: Int, val icon: androidx.compose.ui.graphics.vector.ImageVector) {
+    object ReminderList : Screen("reminder_list", R.string.reminder_list, Icons.Filled.List)
+    object ReminderMap : Screen("reminder_map", R.string.reminder_map, Icons.Filled.Place)
+    object Favorites : Screen("favorites", R.string.favorites, Icons.Filled.Favorite)
+    object AddReminder : Screen("add_reminder", R.string.add_reminder, Icons.Filled.Add)
+    object EditReminder : Screen("edit_reminder", R.string.edit_reminder, Icons.Filled.Add)
+    object PermissionRequest : Screen("permission_request", R.string.permission_request, Icons.Filled.List)
 }

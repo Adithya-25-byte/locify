@@ -1,3 +1,123 @@
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">locify</string>
+    <!-- App Name -->
+    <string name="app_name">Locify</string>
+
+    <!-- Navigation -->
+    <string name="reminder_list">Reminders</string>
+    <string name="reminder_map">Map</string>
+    <string name="favorites">Favorites</string>
+    <string name="add_reminder">Add Reminder</string>
+    <string name="edit_reminder">Edit Reminder</string>
+    <string name="permission_request">Permissions</string>
+
+    <!-- Notification Channels -->
+    <string name="location_channel_name">Location Tracking</string>
+    <string name="location_channel_description">Notifications related to location tracking service</string>
+    <string name="reminder_channel_name">Reminders</string>
+    <string name="reminder_channel_description">Notifications for location and time-based reminders</string>
+    <string name="alarm_channel_name">Reminder Alarms</string>
+    <string name="alarm_channel_description">High priority reminders with full-screen alerts</string>
+
+    <!-- Permissions -->
+    <string name="location_permission_rationale">Locify needs location permissions to remind you when you arrive at specific places.</string>
+    <string name="background_location_permission_rationale">Background location is needed to detect when you enter reminder locations even when the app is closed.</string>
+    <string name="notification_permission_rationale">Notification permission is needed to alert you about your reminders.</string>
+    <string name="grant_permissions">Grant Permissions</string>
+    <string name="permissions_required">Required Permissions</string>
+    <string name="permissions_explanation">Locify needs the following permissions to work properly:</string>
+
+    <!-- Reminder Creation/Edit -->
+    <string name="reminder_title">Title</string>
+    <string name="reminder_description">Description (optional)</string>
+    <string name="reminder_location">Location</string>
+    <string name="reminder_radius">Reminder radius</string>
+    <string name="reminder_radius_value">%1$d meters</string>
+    <string name="reminder_time">Time</string>
+    <string name="reminder_date">Date</string>
+    <string name="reminder_repeat">Repeat</string>
+    <string name="add_task">Add Task</string>
+    <string name="tasks">Tasks</string>
+    <string name="save">Save</string>
+    <string name="cancel">Cancel</string>
+    <string name="delete">Delete</string>
+
+    <!-- Reminder Types -->
+    <string name="location_based">Location-Based</string>
+    <string name="time_based">Time-Based</string>
+    <string name="unlock_based">Device Unlock</string>
+    <string name="reminder_type">Reminder Type</string>
+
+    <!-- Repeat Options -->
+    <string name="repeat_none">No repeat</string>
+    <string name="repeat_daily">Daily</string>
+    <string name="repeat_weekdays">Weekdays</string>
+    <string name="repeat_weekends">Weekends</string>
+    <string name="repeat_weekly">Weekly</string>
+    <string name="repeat_monthly">Monthly</string>
+    <string name="repeat_yearly">Yearly</string>
+    <string name="repeat_custom">Custom</string>
+
+    <!-- Weekdays -->
+    <string name="monday">Monday</string>
+    <string name="tuesday">Tuesday</string>
+    <string name="wednesday">Wednesday</string>
+    <string name="thursday">Thursday</string>
+    <string name="friday">Friday</string>
+    <string name="saturday">Saturday</string>
+    <string name="sunday">Sunday</string>
+
+    <!-- Reminder List -->
+    <string name="no_reminders">No reminders yet</string>
+    <string name="no_reminders_desc">Create your first reminder by tapping the + button</string>
+    <string name="active">Active</string>
+    <string name="completed">Completed</string>
+    <string name="mark_as_complete">Mark as complete</string>
+    <string name="mark_as_active">Mark as active</string>
+    <string name="reminder_deleted">Reminder deleted</string>
+    <string name="undo">Undo</string>
+
+    <!-- Map Screen -->
+    <string name="search_places">Search places...</string>
+    <string name="current_location">Current location</string>
+    <string name="no_location_selected">No location selected</string>
+    <string name="set_reminder_here">Set reminder here</string>
+    <string name="adjust_radius">Adjust radius</string>
+
+    <!-- Favorites -->
+    <string name="favorite_locations">Locations</string>
+    <string name="favorite_reminders">Templates</string>
+    <string name="save_as_favorite">Save as favorite</string>
+    <string name="no_favorite_locations">No favorite locations</string>
+    <string name="no_favorite_reminders">No reminder templates</string>
+    <string name="use_this_template">Use this template</string>
+
+    <!-- Notifications -->
+    <string name="reminder_notification_title">Reminder: %1$s</string>
+    <string name="reminder_notification_location">You\'ve reached: %1$s</string>
+    <string name="reminder_notification_view">View Details</string>
+    <string name="reminder_notification_complete">Complete</string>
+    <string name="reminder_notification_snooze">Snooze</string>
+
+    <!-- Full Screen Alarm -->
+    <string name="dismiss_alarm">Dismiss</string>
+    <string name="snooze_alarm">Snooze (5 min)</string>
+
+    <!-- Unlock Reminder -->
+    <string name="unlock_reminder_title">Phone Unlock Reminder</string>
+    <string name="unlock_reminder_description">Don\'t forget: %1$s</string>
+
+    <!-- Services -->
+    <string name="location_service_running">Locify is monitoring your location</string>
+
+    <!-- Maps -->
+    <string name="maps_api_key">AIzaSyAAHDgLH4ocL0TkqyTRsTu3YERAHE_VyEg</string>
+
+    <!-- Error Messages -->
+    <string name="error_empty_title">Title cannot be empty</string>
+    <string name="error_empty_location">Please select a location</string>
+    <string name="error_empty_time">Please select a time</string>
+    <string name="error_get_location">Could not get current location</string>
+    <string name="error_location_service">Location service is disabled</string>
+    <string name="enable_location">Enable Location</string>
 </resources>

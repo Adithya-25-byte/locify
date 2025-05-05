@@ -1,64 +1,44 @@
 package com.example.Locify.location
 
-import android.content.Context
-import android.location.Address
-import android.location.Geocoder
+import android.util.Log
+import com.google.android.libraries.places.api.Places
+import com.google.android.libraries.places.api.model.AutocompletePrediction
+import com.google.android.libraries.places.api.model.RectangularBounds
+import com.google.android.libraries.places.api.net.FindAutocompletePredictionsRequest
+import com.google.android.libraries.places.api.net.PlacesClient
 import com.google.android.gms.maps.model.LatLng
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import java.io.IOException
-import java.util.Locale
-import javax.inject.Inject
+import kotlinx.coroutines.tasks.await
 
-class LocationSearchClient @Inject constructor(
-    private val context: Context
-) {
-    suspend fun searchLocations(query: String): List<LocationResult> {
-        // Implementation using Google Places API
-        // This would require setting up a GeoDataClient or Places client
-        // with your API key in production code
+class LocationSearchClient(private val placesClient: PlacesClient) {
 
-        // For now, we'll structure the implementation to be ready for API integration
-        return performPlacesSearch(query)
-    }
+    suspend fun searchPlaces(query: String): List<PlaceSearchResult> {
+        return try {
+            val request = FindAutocompletePredictionsRequest.builder()
+                .setQuery(query)
+                .setCountry("IN") // restrict to India; remove if not needed
+                .build()
 
-    private suspend fun performPlacesSearch(query: String): List<LocationResult> {
-        // In production code, you would:
-        // 1. Initialize the Places client with your API key
-        // 2. Create an AutocompletePrediction request with the query
-        // 3. Get place details for each prediction
-        // 4. Convert to LocationResult objects
+            val response = placesClient.findAutocompletePredictions(request).await()
 
-        // Placeholder implementation until API key is provided
-        val results = mutableListOf<LocationResult>()
-        if (query.isNotEmpty()) {
-            results.add(
-                LocationResult(
-                    name = "Search result for: $query",
-                    latitude = 37.7749,
-                    longitude = -122.4194,
-                    address = "123 $query Street, Sample City",
-                    placeId = "place_id_1" // This would be a real Google Place ID in production
-                )
-            )
-            results.add(
-                LocationResult(
-                    name = "$query Point of Interest",
-                    latitude = 37.7750,
-                    longitude = -122.4195,
-                    address = "456 Example Ave, Sample City",
-                    placeId = "place_id_2"
-                )
-            )
+            response.autocompletePredictions.mapNotNull { prediction ->
+                prediction.placeId?.let { placeId ->
+                    PlaceSearchResult(name = prediction.getFullText(null).toString(), latLng = LatLng(0.0, 0.0)) // Actual latLng fetching deferred
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("LocationSearchClient", "Error searching places", e)
+            emptyList()
         }
-        return results
     }
-
-    data class LocationResult(
-        val name: String,
-        val latitude: Double,
-        val longitude: Double,
-        val address: String,
-        val placeId: String = "" // Google Place ID for future reference
-    )
 }
+
+// Later: You may want to fetch exact LatLng using Place ID and a separate Places API call
+
+data class PlaceSearchResult(
+    val name: String,
+    val latLng: LatLng
+)
+
+// To initialize Places in Application.kt
+// Places.initialize(context, "YOUR_API_KEY") // <- Replace YOUR_API_KEY
+// val placesClient = Places.createClient(context)

@@ -1,115 +1,91 @@
 package com.example.Locify.ui.components
 
+import android.app.Dialog
+import android.content.Context
+import android.view.Window
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
-import com.google.android.gms.maps.model.CameraPosition
-import com.google.android.gms.maps.model.LatLng
-import com.google.maps.android.compose.*
-import kotlinx.coroutines.launch
+import androidx.compose.ui.viewinterop.AndroidView
+import com.google.android.gms.maps.CameraUpdateFactory
+import com.google.android.gms.maps.GoogleMap
+import com.google.android.gms.maps.MapView
+import com.google.android.gms.maps.OnMapReadyCallback
+import com.google.android.gms.maps.model.*
+import kotlinx.coroutines.*
 
 @Composable
 fun MapFullScreenDialog(
-    initialLocation: LatLng,
+    context: Context,
     onLocationSelected: (LatLng) -> Unit,
     onDismiss: () -> Unit
 ) {
-    val scope = rememberCoroutineScope()
-    val cameraPositionState = rememberCameraPositionState {
-        position = CameraPosition.fromLatLngZoom(initialLocation, 15f)
-    }
-    var selectedLocation by remember { mutableStateOf(initialLocation) }
-    var searchQuery by remember { mutableStateOf("") }
-    var searchResults by remember { mutableStateOf<List<SearchResult>>(emptyList()) }
+    var markerPosition by remember { mutableStateOf(LatLng(12.9716, 77.5946)) } // Default to Bangalore
 
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(
-            dismissOnBackPress = true,
-            dismissOnClickOutside = false,
-            usePlatformDefaultWidth = false
-        )
-    ) {
-        Surface(
-            modifier = Modifier.fillMaxSize(),
-            color = MaterialTheme.colorScheme.background
-        ) {
-            Column(modifier = Modifier.fillMaxSize()) {
-                // Search bar at the top
-                MapSearchBar(
-                    query = searchQuery,
-                    onQueryChange = { query ->
-                        searchQuery = query
-                        // Implementation for search functionality will be added
-                    },
-                    onSearch = { query ->
-                        scope.launch {
-                            // Call the search service and update results
-                            // searchResults = locationSearchClient.searchLocations(query)
-                        }
-                    },
-                    onResultSelected = { result ->
-                        selectedLocation = result.latLng
-                        scope.launch {
-                            cameraPositionState.animate(
-                                CameraUpdateFactory.newLatLngZoom(result.latLng, 15f)
+    val dialog = remember {
+        Dialog(context).apply {
+            requestWindowFeature(Window.FEATURE_NO_TITLE)
+            setCancelable(true)
+            setContentView(ComposeView(context).apply {
+                setContent {
+                    Surface(modifier = Modifier.fillMaxSize()) {
+                        Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+                            TextField(
+                                value = "",
+                                onValueChange = {},
+                                label = { Text("Search location...") },
+                                modifier = Modifier.fillMaxWidth()
                             )
-                        }
-                    },
-                    searchResults = searchResults
-                )
+                            Spacer(modifier = Modifier.height(8.dp))
 
-                // Map with pin
-                Box(modifier = Modifier.weight(1f)) {
-                    GoogleMap(
-                        modifier = Modifier.fillMaxSize(),
-                        cameraPositionState = cameraPositionState,
-                        onMapClick = { latLng ->
-                            selectedLocation = latLng
-                        }
-                    )
+                            AndroidView(factory = { ctx ->
+                                MapView(ctx).apply {
+                                    onCreate(null)
+                                    getMapAsync(object : OnMapReadyCallback {
+                                        override fun onMapReady(map: GoogleMap) {
+                                            map.uiSettings.isZoomControlsEnabled = true
+                                            val marker = map.addMarker(
+                                                MarkerOptions().position(markerPosition).title("Selected Location")
+                                            )
+                                            map.moveCamera(CameraUpdateFactory.newLatLngZoom(markerPosition, 15f))
 
-                    // Center pin
-                    Box(
-                        contentAlignment = Alignment.Center,
-                        modifier = Modifier.fillMaxSize()
-                    ) {
-                        LocationPin()
+                                            map.setOnMapClickListener { latLng ->
+                                                marker?.position = latLng
+                                                markerPosition = latLng
+                                            }
+                                        }
+                                    })
+                                    onResume()
+                                }
+                            }, modifier = Modifier.weight(1f))
+
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Button(onClick = {
+                                    onDismiss()
+                                    dialog.dismiss()
+                                }) {
+                                    Text("Cancel")
+                                }
+                                Button(onClick = {
+                                    onLocationSelected(markerPosition)
+                                    dialog.dismiss()
+                                }) {
+                                    Text("Confirm")
+                                }
+                            }
+                        }
                     }
                 }
-
-                // Bottom action buttons
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    PurpleButton(
-                        onClick = onDismiss,
-                        text = "Cancel"
-                    )
-
-                    PurpleButton(
-                        onClick = {
-                            onLocationSelected(selectedLocation)
-                            onDismiss()
-                        },
-                        text = "Confirm Location"
-                    )
-                }
-            }
+            })
         }
     }
-}
 
-data class SearchResult(
-    val name: String,
-    val address: String,
-    val latLng: LatLng
-)
+    DisposableEffect(Unit) {
+        dialog.show()
+        onDispose { dialog.dismiss() }
+    }
+}
